@@ -80,7 +80,7 @@ if __name__ == "__main__":
     for sol in archivo[::max(1, len(archivo) // 8)]:
         ax2.annotate(f"x={sol[2]:.2f}", (sol[0], sol[1]),
                      textcoords="offset points", xytext=(6, 6), fontsize=8, color="#1e3a8a")
-    ax2.set_title("Zoom al frente (donde vive x en [0, 2])")
+    ax2.set_title("Frente (donde vive x en [0, 2])")
 
     fig.suptitle("Prueba de dominancia - Schaffer")
     fig.tight_layout()
