@@ -117,7 +117,7 @@ def fast_nondominated_sort(poblacion):
 - **Segunda parte**: ya con F1 armado, hay que ir "pelando capas". Por cada solución `p` del frente actual, vamos a sus dominadas (`dominados_por[p]`) y les restamos 1 a su contador — es como decirles "ya no cuentes a `p` como alguien que te gana, porque `p` ya se fue a su frente". Si al restar el contador de alguna `q` llega a 0 (ya nadie que quede "activo" le gana), esa `q` pasa al siguiente frente.
 - Esto se repite frente tras frente hasta que un frente sale vacío (ya no queda nadie), y ese último vacío se descarta con `frentes.pop()`.
 
-En el `__main__` se generan 150 soluciones con `x ∈ [-10⁵, 10⁵]` (dominio pedido en clase) y se grafican todos los frentes con distintos colores (usando `plt.cm.viridis` para generar una escala de colores automática). **Dato importante**: con este dominio tan grande, casi todos los frentes terminan con **una sola solución** — no es error, es que con una sola variable `x`, fuera del tramo `[0,2]` (donde de verdad hay competencia entre `f1` y `f2`), las soluciones quedan ordenadas en una fila estricta (cada una le gana a la siguiente), así que no hay manera de que dos empaten en el mismo frente.
+En el `__main__` se generan 150 soluciones con `x ∈ [-10⁵, 10⁵]` (dominio pedido en clase) y se grafican todos los frentes con distintos colores (usando `plt.cm.viridis` para generar una escala de colores automática). **Dato importante**: con este dominio tan grande, casi todos los frentes terminan con **una sola solución** — no es error. Con una sola variable `x`, fuera del tramo `[0,2]` (donde de verdad hay competencia entre `f1` y `f2`) las soluciones quedan en **dos filas**: las de `x < 0` y las de `x > 2`. Dentro de cada fila cada una le gana a la siguiente, así que de cada lado cabe como máximo una por frente. Una de la izquierda y una de la derecha sí pueden empatar, pero solo si están casi a la misma distancia de `x = 1` (en concreto, si `|x_izq + x_der − 2| < 2`). Con 150 puntos regados en `±10⁵` quedan a cientos o miles de distancia entre sí, casi nunca se forma esa pareja, y por eso sale una sola solución por frente.
 
 ---
 
@@ -163,6 +163,47 @@ def crowding_distance(frente, poblacion, num_objetivos=2):
 - Para el resto (`i` de 1 a `l-2`, o sea los que quedan "en medio"), la distancia se va sumando con `poblacion[ordenado[i+1]][m] - poblacion[ordenado[i-1]][m]` — es literalmente "qué tan separados están mis dos vecinos" en ese objetivo. Entre más separados, más "sola" está esa solución ahí. Esto se hace **sin normalizar** (o sea, sin dividir entre el rango del objetivo), porque el profe dijo que también se vale hacerlo así.
 - Como el `for m` se repite para los 2 objetivos, cada solución termina con la **suma** de qué tan aislada está en `f1` más qué tan aislada está en `f2`.
 
-**Por qué salen tantos `999999` al correrlo**: la mayoría de los frentes de Schaffer con 1 variable solo tienen 2 soluciones (ya explicado arriba). Cuando un frente tiene nada más 2 elementos, ambos son al mismo tiempo "el primero" y "el último" al ordenar — o sea, los dos siempre caen como punto frontera, y los dos terminan con `999999`. Nada más en frentes de 3+ soluciones (como el F1) se alcanzan a ver valores "normales" en los de en medio.
+**Por qué salen tantos `999999` al correrlo**: aquí el dominio es chico (`x ∈ [-10,10]` con 100 puntos), así que los puntos quedan pegaditos y casi siempre se forma la pareja izquierda–derecha que se explicó en `frentes_schaffer.py` — por eso la mayoría de los frentes (fuera de F1) tienen **2** soluciones, y nunca más de 2. Cuando un frente tiene nada más 2 elementos, ambos son al mismo tiempo "el primero" y "el último" al ordenar — o sea, los dos siempre caen como punto frontera, y los dos terminan con `999999`. Nada más en frentes de 3+ soluciones (como el F1) se alcanzan a ver valores "normales" en los de en medio.
 
 El `__main__` genera 100 soluciones (`x ∈ [-10,10]`), separa en frentes, y por cada frente imprime cada solución con sus valores (`f1`, `f2`, `x`) junto a su crowding distance.
+
+---
+
+## `nsga2_avance.py` (en progreso)
+
+Aquí empezamos a armar el **NSGA-II completo**, siguiendo el pseudocódigo del artículo de Deb (el que se vio en clase). Se reutilizan tal cual `dominancia`, `schaffer`, `fast_nondominated_sort` y `crowding_distance` de los archivos anteriores, y lo nuevo es el ciclo que decide quién pasa a la siguiente generación.
+
+### `siguiente_poblacion(P, Q)`
+```python
+R = P + Q                                   # Rt = Pt U Qt
+frentes = fast_nondominated_sort(R)         # F = fast-non-dominated-sort(Rt)
+
+P_nueva = []                                # Pt+1 = vacio
+i = 0
+while i < len(frentes) and len(P_nueva) + len(frentes[i]) <= N:
+    distancia = crowding_distance(frentes[i], R)
+    for idx in frentes[i]:
+        P_nueva.append(R[idx])
+    i += 1
+
+if len(P_nueva) < N:
+    distancia = crowding_distance(frentes[i], R)
+    ordenado = sorted(frentes[i], key=lambda idx: distancia[idx], reverse=True)
+    faltan = N - len(P_nueva)
+    for idx in ordenado[:faltan]:
+        P_nueva.append(R[idx])
+```
+- **Juntar padres e hijos** (`R = P + Q`): la población actual `P` y sus hijos `Q` compiten todos juntos, por eso `R` tiene `2N` soluciones. Esto es lo que hace **elitista** al NSGA-II: los buenos padres nunca se pierden, porque siguen compitiendo contra sus propios hijos.
+- **Separar en frentes**: se aplica el `fast_nondominated_sort` de antes sobre `R`.
+- **Llenar la nueva población por frentes** (el `while`): se van metiendo frentes **completos** (F1, luego F2, ...) mientras quepan sin pasarse de `N`. Es el `until |Pt+1| + |Fi| <= N` del pseudocódigo. Nota que `i` empieza en 0 (en el pseudocódigo empieza en 1) porque en Python las listas arrancan en 0.
+- **El frente que ya no cabe completo** (el `if`): aquí es donde entra la crowding distance. Se ordena ese frente **de mayor a menor distancia** (`reverse=True`, el `Sort(Fi, ≺n)` "en orden descendente") y solo entran los primeros `N - len(P_nueva)`, o sea los más "solos". Así, cuando hay que descartar, se descartan los que están en zonas más amontonadas y se conserva la diversidad del frente.
+
+Al correrlo con `N = 10` imprime qué frentes entraron completos y cuál se tuvo que cortar, por ejemplo:
+```
+  F6 entra completo (2 soluciones)
+  F7 no cabe completo: entran 1 de 2 (por crowding distance)
+```
+
+### Lo que falta
+- **`make_new_pop(P)`**: todavía no hace selección, cruza ni mutación. Por ahora genera hijos aleatorios, nada más para poder probar el resto del ciclo.
+- **Las generaciones** (`t = t + 1`): por ahora el `__main__` hace una sola vuelta. Falta repetir el ciclo varias generaciones y graficar el frente al que se llega.
