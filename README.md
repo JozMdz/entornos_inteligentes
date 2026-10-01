@@ -169,11 +169,21 @@ El `__main__` genera 100 soluciones (`x ∈ [-10,10]`), separa en frentes, y por
 
 ---
 
-## `nsga2_avance.py` (en progreso)
+## `nsga2_schaffer.py`
 
-Aquí empezamos a armar el **NSGA-II completo**, siguiendo el pseudocódigo del artículo de Deb (el que se vio en clase). Se reutilizan tal cual `dominancia`, `schaffer`, `fast_nondominated_sort` y `crowding_distance` de los archivos anteriores, y lo nuevo es el ciclo que decide quién pasa a la siguiente generación.
+Aquí juntamos todo lo anterior en el **NSGA-II completo** para el problema de Schaffer, siguiendo el pseudocódigo del artículo de Deb (el que se vio en clase). Se reutilizan tal cual `dominancia`, `schaffer`, `fast_nondominated_sort` y `crowding_distance` de los archivos anteriores. Lo nuevo es el ciclo que decide quién pasa a la siguiente generación y cómo se crean los hijos.
 
-### `siguiente_poblacion(P, Q)`
+Los parámetros están arriba, como constantes:
+```python
+N = 50                 # tamaño de la poblacion
+GENERACIONES = 100
+LIM_INF = -10 ** 5     # dominio de x pedido en clase
+LIM_SUP = 10 ** 5
+ALFA = 0.5             # que tanto se estira el rango de los padres en la cruza
+PROB_MUTACION = 0.1    # probabilidad de mutar a cada hijo
+```
+
+### `siguiente_poblacion(P, Q)`: el pseudocódigo
 ```python
 R = P + Q                                   # Rt = Pt U Qt
 frentes = fast_nondominated_sort(R)         # F = fast-non-dominated-sort(Rt)
@@ -184,6 +194,7 @@ while i < len(frentes) and len(P_nueva) + len(frentes[i]) <= N:
     distancia = crowding_distance(frentes[i], R)
     for idx in frentes[i]:
         P_nueva.append(R[idx])
+        ...
     i += 1
 
 if len(P_nueva) < N:
@@ -192,18 +203,59 @@ if len(P_nueva) < N:
     faltan = N - len(P_nueva)
     for idx in ordenado[:faltan]:
         P_nueva.append(R[idx])
+        ...
 ```
 - **Juntar padres e hijos** (`R = P + Q`): la población actual `P` y sus hijos `Q` compiten todos juntos, por eso `R` tiene `2N` soluciones. Esto es lo que hace **elitista** al NSGA-II: los buenos padres nunca se pierden, porque siguen compitiendo contra sus propios hijos.
 - **Separar en frentes**: se aplica el `fast_nondominated_sort` de antes sobre `R`.
 - **Llenar la nueva población por frentes** (el `while`): se van metiendo frentes **completos** (F1, luego F2, ...) mientras quepan sin pasarse de `N`. Es el `until |Pt+1| + |Fi| <= N` del pseudocódigo. Nota que `i` empieza en 0 (en el pseudocódigo empieza en 1) porque en Python las listas arrancan en 0.
 - **El frente que ya no cabe completo** (el `if`): aquí es donde entra la crowding distance. Se ordena ese frente **de mayor a menor distancia** (`reverse=True`, el `Sort(Fi, ≺n)` "en orden descendente") y solo entran los primeros `N - len(P_nueva)`, o sea los más "solos". Así, cuando hay que descartar, se descartan los que están en zonas más amontonadas y se conserva la diversidad del frente.
+- Además de la nueva población, la función regresa en qué frente quedó cada solución (`rango`) y su crowding distance (`distancia_nueva`), porque el torneo de `make_new_pop` los necesita.
 
-Al correrlo con `N = 10` imprime qué frentes entraron completos y cuál se tuvo que cortar, por ejemplo:
+### `make_new_pop(P, rango, distancia)`: selección, cruza y mutación
+```python
+while len(Q) < N:
+    padre1 = torneo(P, rango, distancia)
+    padre2 = torneo(P, rango, distancia)
+    y1, y2 = cruza_blx(padre1[2], padre2[2])
+    Q.append(evaluar(recortar(mutacion(y1))))
+    ...
 ```
-  F6 entra completo (2 soluciones)
-  F7 no cabe completo: entran 1 de 2 (por crowding distance)
-```
+Se repite hasta juntar `N` hijos. Cada vuelta escoge dos padres, los cruza para sacar dos hijos, los muta, y los evalúa (`evaluar(x)` arma la solución `[f1, f2, x]`).
 
-### Lo que falta
-- **`make_new_pop(P)`**: todavía no hace selección, cruza ni mutación. Por ahora genera hijos aleatorios, nada más para poder probar el resto del ciclo.
-- **Las generaciones** (`t = t + 1`): por ahora el `__main__` hace una sola vuelta. Falta repetir el ciclo varias generaciones y graficar el frente al que se llega.
+**Selección: `torneo()` y `comparacion_crowded()`**
+- El torneo binario toma dos soluciones al azar y se queda con la mejor.
+- "Mejor" es el operador `≺n` del pseudocódigo (`comparacion_crowded`): gana la de **menor frente**; si están en el mismo frente, gana la de **mayor crowding distance** (la más "sola"). Así se premia primero la calidad y luego la diversidad.
+
+**Cruza: `cruza_blx()` (Blend Alpha Crossover, BLX-α)**
+```python
+rango = maximo - minimo                          # range_i = max_i - min_i
+beta1 = minimo - rango * ALFA                    # B1 = min_i - range_i * alfa
+beta2 = maximo + rango * ALFA                    # B2 = max_i + range_i * alfa
+y1 = beta1 + random.random() * (beta2 - beta1)   # y1 = B1 + rand(B2 - B1)
+y2 = beta1 + random.random() * (beta2 - beta1)   # y2 = B1 + rand(B2 - B1), con otro rand
+```
+- Se toma el intervalo entre los dos padres y se **estira** `ALFA` veces su tamaño hacia cada lado. Cada hijo es un punto al azar dentro de ese intervalo estirado.
+- Las fórmulas de `y1` y `y2` se ven iguales, pero cada una usa **su propio `random.random()`**, por eso salen dos hijos distintos.
+- ¿Por qué no simplemente el **promedio** de los padres? Porque el hijo siempre quedaría *entre* los padres: generación tras generación la población se encogería hacia un solo punto y se perdería la diversidad. Con BLX-α el hijo también puede salir un poco *por fuera* de los padres.
+
+**Mutación: `mutacion()`**
+- Con probabilidad `PROB_MUTACION` (10%), el hijo se cambia por un valor al azar de todo el dominio. Sirve para meter diversidad nueva: si los dos padres son iguales, el rango de la cruza es 0 y BLX-α solo devolvería copias.
+- Si el hijo mutado sale malo no pasa nada: por el elitismo, en la siguiente vuelta compite contra los padres y se descarta.
+
+**`recortar()`**: como BLX-α estira el intervalo, un hijo puede salirse de `[-10⁵, 10⁵]`; aquí se regresa al límite.
+
+### `nsga2()`: las generaciones
+```python
+P = genera_poblacion(N)                    # P0 aleatoria
+P, rango, distancia = siguiente_poblacion(P, [])
+Q = make_new_pop(P, rango, distancia)      # Q0 = make-new-pop(P0)
+
+for t in range(GENERACIONES):
+    P, rango, distancia = siguiente_poblacion(P, Q)
+    Q = make_new_pop(P, rango, distancia)   # Qt+1 = make-new-pop(Pt+1)
+```
+- Antes del ciclo, la población inicial `P0` también se separa en frentes para que el primer torneo ya pueda usar `≺n` (así lo hace el artículo). El truco es llamar a `siguiente_poblacion` con `Q` vacío: `R` queda del tamaño de `P0`, todo cabe y nadie se descarta.
+- Luego se repite el pseudocódigo `GENERACIONES` veces; el `t = t + 1` lo hace el `for`.
+
+### Qué sale al correrlo
+Imprime la población final y guarda `nsga2_schaffer.png` con dos vistas: la completa (población inicial en gris regada en todo el dominio, población final en azul) y un **zoom** a la zona del frente. Al final, las 50 soluciones quedan en F1 con `x ∈ [0, 2]` y repartidas a lo largo de toda la curva, de `(0, 4)` a `(4, 0)`. Gracias a la crowding distance, no se amontonan en un solo punto.
