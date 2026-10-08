@@ -259,3 +259,37 @@ for t in range(GENERACIONES):
 
 ### Qué sale al correrlo
 Imprime la población final y guarda `nsga2_schaffer.png` con dos vistas: la completa (población inicial en gris regada en todo el dominio, población final en azul) y un **zoom** a la zona del frente. Al final, las 50 soluciones quedan en F1 con `x ∈ [0, 2]` y repartidas a lo largo de toda la curva, de `(0, 4)` a `(4, 0)`. Gracias a la crowding distance, no se amontonan en un solo punto.
+
+---
+
+## `hypervolume.py`
+
+Calcula el **hypervolume** de un frente (minimización): el área (o volumen) que domina el frente, encerrada por un **punto de referencia** `M` (el anti-óptimo). Sigue el pseudocódigo **LebMeasure** del artículo de Fleischer, *The Measure of Pareto Optima* (el que nos pasaron). Se reutiliza `dominancia` de los archivos anteriores.
+
+La idea: en vez de calcular todas las intersecciones (inclusión-exclusión, que es muy cara), se va **"cortando"** del frente un hipercubo que solo domina el primer punto, se suma su volumen y se repite con lo que queda.
+
+### `leb_measure(frente, M)`: el pseudocódigo
+```python
+leb = 0.0                                          # LebMeasure = 0.0
+new_size = len(lista)                              # newSize = Size
+while new_size > 1:                                # while (newSize > 1)
+    lop_off_vol = 1.0                              # lopOffVol = 1.0
+    p1 = lista[0]                                  # get first vector p1 in List
+    spawn_data = []
+    for i in range(n):                             # for (i = 0; i < n; i++)
+        b = get_bound_value(lista, i, M)           # bi = getBoundValue(fi(x1))
+        spawn_data.append(spawn_vector(p1, i, b))  # spawnVector(p1, i, bi)
+        lop_off_vol *= abs(p1[i] - b)              # lopOffVol *= |fi(x1) - bi|
+    leb += lop_off_vol                             # LebMeasure += lopOffVol
+    lista.pop(0)                                   # delete p1 from List
+    new_size = nd_filter(lista, spawn_data, M)     # newSize = ndFilter(List, SpawnData)
+```
+- **`get_bound_value`**: para cada objetivo `i` busca `u_i(p1)`, el **menor valor más grande** que `f_i(p1)` entre los demás vectores de la lista. Si no hay ninguno, usa `M_i`. La caja entre `p1` y esas cotas solo la domina `p1`, así que se puede cortar sin contar nada doble.
+- **`lop_off_vol`**: el volumen de esa caja, `∏ |f_i(x1) − b_i|` (la medida de Lebesgue de las diapositivas). Se suma a `leb`.
+- **`spawn_vector`**: lo que quedaba de la región de `p1` se describe con `n` vectores nuevos, cada uno igual a `p1` pero con un objetivo cambiado por su cota `b_i`.
+- **`nd_filter`**: tira los vectores nuevos que ya están dominados por alguno de la lista, o que tienen un `M_i` (su caja tendría un lado de largo 0). Los que sobreviven se meten al inicio de la lista, en lugar de `p1`.
+- **`last_vol`**: cuando queda un solo vector, su caja completa hasta `M` es el último pedazo. **Ojo:** el pseudocódigo calcula `lastVol` pero se le olvida sumarlo antes del `return`; aquí sí se suma.
+
+Como dicen las diapositivas, este método es **sensible a soluciones repetidas o dominadas**, así que el frente que se le pasa tiene que ser no dominado (por ejemplo, el F1 de `fast_nondominated_sort`).
+
+Con el frente `(1,6), (2,4), (3,3), (5,1)` y referencia `(6,7)` da **18**. Se puede comprobar a mano con franjas: `1·1 + 1·3 + 2·4 + 1·6 = 18`.
