@@ -79,7 +79,7 @@ def leb_measure(frente, M):
 
 
 if __name__ == "__main__":
-    print("Hypervolume (LebMeasure) - frente de ejemplo")
+    print("Hypervolume")
 
     frente = [[1.0, 6.0], [2.0, 4.0], [3.0, 3.0], [5.0, 1.0]]
     M = [6.0, 7.0]   # punto de referencia
