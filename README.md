@@ -293,3 +293,21 @@ while new_size > 1:                                # while (newSize > 1)
 Como dicen las diapositivas, este método es **sensible a soluciones repetidas o dominadas**, así que el frente que se le pasa tiene que ser no dominado (por ejemplo, el F1 de `fast_nondominated_sort`).
 
 Con el frente `(1,6), (2,4), (3,3), (5,1)` y referencia `(6,7)` da **18**. Se puede comprobar a mano con franjas: `1·1 + 1·3 + 2·4 + 1·6 = 18`.
+
+---
+
+## Pendiente
+
+**Tarea:** aplicar NSGA-II y evaluar la calidad de la salida con el hipervolumen.
+
+Problemas de prueba: **ZDT1, ZDT2, ZDT3, ZDT4 y ZDT6**, del artículo de Zitzler, Deb y Thiele (1999), *Comparison of Multiobjective Evolutionary Algorithms* (ahí se llaman T1, T2, T3, T4 y T6; ecuaciones 7, 8, 9, 10 y 12). ZDT5 no se pide.
+
+- [ ] Adaptar `nsga2_schaffer.py` a **varias variables**: cada solución pasa de `[f1, f2, x]` a `[f1, f2, x1, ..., xm]`. La población inicial, la cruza BLX-α y la mutación se aplican a cada variable, y cada una se recorta a su dominio.
+- [ ] Programar las funciones de prueba:
+  - ZDT1, ZDT2 y ZDT3: `m = 30`, `xi ∈ [0, 1]`.
+  - ZDT4: `m = 10`, `x1 ∈ [0, 1]` y las demás en `[−5, 5]`.
+  - ZDT6: `m = 10`, `xi ∈ [0, 1]`.
+- [ ] Correr NSGA-II en cada función y graficar el frente final contra el frente óptimo (el que sale con `g = 1`).
+- [ ] Sacar el F1 de la población final con `fast_nondominated_sort` y calcular su hipervolumen con `leb_measure` de `hypervolume.py`.
+- [ ] Elegir y anotar el **punto de referencia** `M` de cada función, un poco peor que el peor `f1` y `f2` del frente. Con el mismo `M` se pueden comparar corridas.
+- [ ] Opcional: correr varias veces con semillas distintas y reportar el promedio del hipervolumen.
