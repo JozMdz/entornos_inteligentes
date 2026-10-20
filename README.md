@@ -290,24 +290,80 @@ while new_size > 1:                                # while (newSize > 1)
 - **`nd_filter`**: tira los vectores nuevos que ya están dominados por alguno de la lista, o que tienen un `M_i` (su caja tendría un lado de largo 0). Los que sobreviven se meten al inicio de la lista, en lugar de `p1`.
 - **`last_vol`**: cuando queda un solo vector, su caja completa hasta `M` es el último pedazo. **Ojo:** el pseudocódigo calcula `lastVol` pero se le olvida sumarlo antes del `return`; aquí sí se suma.
 
+Antes del ciclo se quitan los **puntos repetidos**, porque LebMeasure sumaría su caja dos veces. También se **quitan los puntos que no quedan dentro de la referencia**, o sea los que no son menores que `M` en todos los objetivos. Esos puntos no dominan nada de la caja. Si se dejaran, el `abs()` del pseudocódigo convertiría la diferencia negativa en positiva y sumaría volumen falso. Si no queda ningún punto, el hipervolumen es **0**. Esto puede pasar, por ejemplo, en ZDT4 cuando NSGA-II se atora en un frente local con `f2` muy grande.
+
 Como dicen las diapositivas, este método es **sensible a soluciones repetidas o dominadas**, así que el frente que se le pasa tiene que ser no dominado (por ejemplo, el F1 de `fast_nondominated_sort`).
 
 Con el frente `(1,6), (2,4), (3,3), (5,1)` y referencia `(6,7)` da **18**. Se puede comprobar a mano con franjas: `1·1 + 1·3 + 2·4 + 1·6 = 18`.
 
 ---
 
+## `nsga2_zdt.py`
+
+La tarea: aplicar el **NSGA-II** a las funciones de prueba **ZDT1, ZDT2, ZDT3, ZDT4 y ZDT6** del artículo de Zitzler, Deb y Thiele (1999), y evaluar la calidad de la salida con el **hipervolumen** de `hypervolume.py` (se importa `leb_measure`). El NSGA-II es el mismo de `nsga2_schaffer.py` (`fast_nondominated_sort`, `crowding_distance`, `siguiente_poblacion`, torneo con `<n`). Lo que cambia es que ahora hay **muchas variables**.
+
+### Las funciones de prueba
+Todas siguen el molde de la ecuación 6 del artículo: `f1` depende solo de `x1`, y `f2 = g(x2..xm) · h(f1, g)`. `g` mide qué tan lejos estás del frente óptimo y `h` le da la forma.
+
+| Función | Ec. | Variables | Dominio | Dificultad |
+|---|---|---|---|---|
+| ZDT1 | 7 | 30 | `[0, 1]` | frente convexo |
+| ZDT2 | 8 | 30 | `[0, 1]` | frente no convexo |
+| ZDT3 | 9 | 30 | `[0, 1]` | frente en pedazos |
+| ZDT4 | 10 | 10 | `x1 ∈ [0, 1]`, el resto en `[−5, 5]` | 21⁹ frentes locales que atrapan al algoritmo |
+| ZDT6 | 12 | 10 | `[0, 1]` | frente no convexo y soluciones disparejas |
+
+Están en el diccionario `PROBLEMAS`, que guarda para cada una su función, su número de variables y los límites de cada variable.
+
+### Qué cambia respecto a Schaffer
+- **Cada solución** pasa de `[f1, f2, x]` a `[f1, f2, x1, ..., xm]`. Los objetivos siguen en las posiciones 0 y 1, así que `dominancia`, `fast_nondominated_sort` y `crowding_distance` no cambian.
+- **Cruza BLX-α**: se aplica **variable por variable**. `cruza_blx` es la misma de antes, pero `make_new_pop` la llama una vez por cada `xi`.
+- **Mutación**: cada variable se cambia con probabilidad `1/m` por un valor al azar de su dominio. Con una sola variable esto era lo mismo que mutar al hijo completo.
+- **Recortar**: cada variable regresa a su propio dominio. Esto importa en ZDT4, donde `x1` y el resto tienen límites distintos.
+- **Parámetros**: los del artículo, población `N = 100` y `250` generaciones.
+- **Semilla**: `SEMILLA = 1`. Se llama a `random.seed(SEMILLA)` antes de correr **cada** función, así cada una da siempre el mismo resultado y no depende de las otras. Para probar otra corrida basta con cambiar el número.
+
+### Calidad: el hipervolumen
+- Se toma el **F1 de la población final** y se le calcula el hipervolumen con referencia `M = (1.1, 1.1)`. Es la misma idea que la `(6, 7)` del ejemplo de clase: un poco peor que el peor punto del frente. Como en las ZDT el frente óptimo va de 0 a 1 en los dos objetivos, queda `1.1`.
+- Para tener contra qué comparar, también se calcula el hipervolumen del **frente óptimo** (`frente_optimo`, con `g = 1` y 500 puntos). El **porcentaje** `HV obtenido / HV óptimo` dice qué tan cerca quedó NSGA-II: 100 % sería el frente perfecto.
+- En ZDT3 la curva con `g = 1` tiene tramos dominados, así que `frente_optimo` se queda solo con los pedazos no dominados.
+
+### Salidas
+- `salidas/zdtN_objetivos.txt`: `f1 f2` de cada solución del F1.
+- `salidas/zdtN_variables.txt`: `x1 ... xm` de cada solución, **en el mismo orden** (el renglón 1 de uno es el renglón 1 del otro).
+- `nsga2_zdt.png`: una gráfica por función (frente óptimo en gris, F1 de NSGA-II en azul y la referencia) más una tabla con el hipervolumen.
+
+### Resultados (semilla 1)
+| Función | HV obtenido | HV óptimo | % |
+|---|---|---|---|
+| ZDT1 | 0.8660 | 0.8756 | 98.9 % |
+| ZDT2 | 0.5319 | 0.5423 | 98.1 % |
+| ZDT3 | 1.2986 | 1.3299 | 97.7 % |
+| ZDT4 | 0.3438 | 0.8756 | 39.3 % |
+| ZDT6 | 0.4447 | 0.5072 | 87.7 % |
+
+En ZDT1, ZDT2 y ZDT3 el frente azul queda encima del gris y el hipervolumen pasa del 97 %. **ZDT6** queda un poco arriba del óptimo y con algunos puntos sueltos en `f1 ≈ 0.28`, que es la zona difícil de esa función: ahí casi no hay soluciones. **ZDT4 es la difícil**: NSGA-II se queda atorado en un frente local, paralelo al óptimo pero más arriba. Solo la parte del frente que baja de `f2 = 1.1` cuenta para el hipervolumen. Con otras semillas puede quedar todavía más arriba y dar **0**, que es justo el caso que comentaron en el grupo. El artículo también reporta que ningún algoritmo resolvió ZDT4 con estos parámetros (sección 8).
+
+---
+
 ## Pendiente
+
+Hecho en `nsga2_zdt.py` (ver arriba). Solo queda lo opcional.
 
 **Tarea:** aplicar NSGA-II y evaluar la calidad de la salida con el hipervolumen.
 
 Problemas de prueba: **ZDT1, ZDT2, ZDT3, ZDT4 y ZDT6**, del artículo de Zitzler, Deb y Thiele (1999), *Comparison of Multiobjective Evolutionary Algorithms* (ahí se llaman T1, T2, T3, T4 y T6; ecuaciones 7, 8, 9, 10 y 12). ZDT5 no se pide.
 
-- [ ] Adaptar `nsga2_schaffer.py` a **varias variables**: cada solución pasa de `[f1, f2, x]` a `[f1, f2, x1, ..., xm]`. La población inicial, la cruza BLX-α y la mutación se aplican a cada variable, y cada una se recorta a su dominio.
-- [ ] Programar las funciones de prueba:
+- [x] Adaptar `nsga2_schaffer.py` a **varias variables**: cada solución pasa de `[f1, f2, x]` a `[f1, f2, x1, ..., xm]`. La población inicial, la cruza BLX-α y la mutación se aplican a cada variable, y cada una se recorta a su dominio.
+- [x] Programar las funciones de prueba:
   - ZDT1, ZDT2 y ZDT3: `m = 30`, `xi ∈ [0, 1]`.
   - ZDT4: `m = 10`, `x1 ∈ [0, 1]` y las demás en `[−5, 5]`.
   - ZDT6: `m = 10`, `xi ∈ [0, 1]`.
-- [ ] Correr NSGA-II en cada función y graficar el frente final contra el frente óptimo (el que sale con `g = 1`).
-- [ ] Sacar el F1 de la población final con `fast_nondominated_sort` y calcular su hipervolumen con `leb_measure` de `hypervolume.py`.
-- [ ] Elegir y anotar el **punto de referencia** `M` de cada función, un poco peor que el peor `f1` y `f2` del frente. Con el mismo `M` se pueden comparar corridas.
-- [ ] Opcional: correr varias veces con semillas distintas y reportar el promedio del hipervolumen.
+- [x] Correr NSGA-II en cada función y graficar el frente final contra el frente óptimo (el que sale con `g = 1`).
+- [x] Imprimir la salida de cada corrida en **2 archivos**, con una solución por renglón y en el mismo orden en los dos (el renglón 1 de uno corresponde al renglón 1 del otro):
+  - **Objetivos**: `f1 f2` de cada solución.
+  - **Variables de decisión**: `x1 x2 ... xm` de cada solución.
+- [x] Sacar el F1 de la población final con `fast_nondominated_sort` y calcular su hipervolumen con `leb_measure` de `hypervolume.py`.
+- [x] Elegir y anotar el **punto de referencia** `M` de cada función, un poco peor que el peor `f1` y `f2` del frente. Con el mismo `M` se pueden comparar corridas.
+- [x] Un HV de **0 es válido**: quiere decir que ningún punto del frente quedó dentro de la referencia. Pasa sobre todo en ZDT4, cuando NSGA-II no logra salir de los frentes locales.
+- [ ] Opcional: correr varias veces con semillas distintas (cambiando `SEMILLA`) y reportar el promedio del hipervolumen.

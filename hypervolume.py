@@ -52,8 +52,22 @@ def nd_filter(lista, spawn_data, M):
 
 def leb_measure(frente, M):
     # frente: soluciones no dominadas [f1, f2, ...], M: punto de referencia (minimizar)
-    lista = [list(p) for p in frente]
     n = len(M)
+
+    # solo cuentan los puntos que quedan dentro de la referencia (menores que M en todo);
+    # los demas no dominan nada de la caja y con el abs() sumarian volumen falso.
+    # tampoco se aceptan repetidos: LebMeasure sumaria su caja dos veces
+    lista = []
+    for p in frente:
+        dentro = True
+        for i in range(n):
+            if p[i] >= M[i]:
+                dentro = False
+        if dentro and list(p) not in lista:   # los repetidos se cuentan una sola vez
+            lista.append(list(p))
+
+    if len(lista) == 0:
+        return 0.0   # ningun punto dentro de la referencia: HV = 0
 
     leb = 0.0                                          # LebMeasure = 0.0
     new_size = len(lista)                              # newSize = Size
