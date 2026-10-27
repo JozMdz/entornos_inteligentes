@@ -329,8 +329,11 @@ Están en el diccionario `PROBLEMAS`, que guarda para cada una su función, su n
 - En ZDT3 la curva con `g = 1` tiene tramos dominados, así que `frente_optimo` se queda solo con los pedazos no dominados.
 
 ### Salidas
-- `salidas/zdtN_objetivos.txt`: `f1 f2` de cada solución del F1.
-- `salidas/zdtN_variables.txt`: `x1 ... xm` de cada solución, **en el mismo orden** (el renglón 1 de uno es el renglón 1 del otro).
+Lo que pide la tarea: un `FUN.txt` y un `VAR.txt` por problema, todo en un solo `.zip`.
+- `salidas/ZDTn/FUN.txt`: las **funciones objetivo** `f1 f2` de cada solución del F1 final.
+- `salidas/ZDTn/VAR.txt`: las **variables de decisión** `x1 ... xm` que producen esos objetivos, **en el mismo orden** (el renglón 1 de `FUN.txt` sale del renglón 1 de `VAR.txt`). Son 30 columnas en ZDT1, ZDT2 y ZDT3, y 10 en ZDT4 y ZDT6.
+- Los números se guardan **sin redondear**. Con 6 decimales, en ZDT6 evaluar otra vez `VAR.txt` ya no daba el mismo `FUN.txt`. `g` usa una raíz cuarta, `(Σxi / 9)^0.25`, y cuando las `xi` son casi 0, redondearlas a `0.000000` cambia `f2` hasta en 0.1.
+- `tarea_nsga2_zdt.zip`: las 5 carpetas `ZDT1/ ... ZDT6/`, cada una con su `FUN.txt` y su `VAR.txt`. Es el archivo que se sube.
 - `nsga2_zdt.png`: una gráfica por función (frente óptimo en gris, F1 de NSGA-II en azul y la referencia) más una tabla con el hipervolumen.
 
 ### Resultados (semilla 1)
@@ -360,7 +363,7 @@ Problemas de prueba: **ZDT1, ZDT2, ZDT3, ZDT4 y ZDT6**, del artículo de Zitzler
   - ZDT4: `m = 10`, `x1 ∈ [0, 1]` y las demás en `[−5, 5]`.
   - ZDT6: `m = 10`, `xi ∈ [0, 1]`.
 - [x] Correr NSGA-II en cada función y graficar el frente final contra el frente óptimo (el que sale con `g = 1`).
-- [x] Imprimir la salida de cada corrida en **2 archivos**, con una solución por renglón y en el mismo orden en los dos (el renglón 1 de uno corresponde al renglón 1 del otro):
+- [x] Imprimir la salida de cada corrida en **2 archivos** (`FUN.txt` y `VAR.txt`), con una solución por renglón y en el mismo orden en los dos (el renglón 1 de uno corresponde al renglón 1 del otro):
   - **Objetivos**: `f1 f2` de cada solución.
   - **Variables de decisión**: `x1 x2 ... xm` de cada solución.
 - [x] Sacar el F1 de la población final con `fast_nondominated_sort` y calcular su hipervolumen con `leb_measure` de `hypervolume.py`.

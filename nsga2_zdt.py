@@ -288,14 +288,16 @@ def frente_optimo(nombre, puntos=500):
 
 
 def guardar(nombre, frente):
-    # 2 archivos, una solucion por renglon y en el mismo orden
-    os.makedirs("salidas", exist_ok=True)
-    with open(f"salidas/{nombre.lower()}_objetivos.txt", "w") as f:
+    # FUN.txt (funciones objetivo) y VAR.txt (variables que las producen), una carpeta por problema
+    # una solucion por renglon y en el mismo orden: el renglon 1 de FUN.txt sale del renglon 1 de VAR.txt
+    carpeta = f"salidas/{nombre}"
+    os.makedirs(carpeta, exist_ok=True)
+    with open(f"{carpeta}/FUN.txt", "w") as f:
         for sol in frente:
-            f.write(f"{sol[0]:.6f} {sol[1]:.6f}\n")
-    with open(f"salidas/{nombre.lower()}_variables.txt", "w") as f:
+            f.write(f"{sol[0]} {sol[1]}\n")   # precision completa, sin redondear
+    with open(f"{carpeta}/VAR.txt", "w") as f:
         for sol in frente:
-            f.write(" ".join(f"{v:.6f}" for v in sol[2:]) + "\n")
+            f.write(" ".join(f"{v}" for v in sol[2:]) + "\n")   # sin redondear: en ZDT6 6 decimales ya cambian f2
 
 
 if __name__ == "__main__":
