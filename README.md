@@ -370,3 +370,97 @@ Problemas de prueba: **ZDT1, ZDT2, ZDT3, ZDT4 y ZDT6**, del artículo de Zitzler
 - [x] Elegir y anotar el **punto de referencia** `M` de cada función, un poco peor que el peor `f1` y `f2` del frente. Con el mismo `M` se pueden comparar corridas.
 - [x] Un HV de **0 es válido**: quiere decir que ningún punto del frente quedó dentro de la referencia. Pasa sobre todo en ZDT4, cuando NSGA-II no logra salir de los frentes locales.
 - [ ] Opcional: correr varias veces con semillas distintas (cambiando `SEMILLA`) y reportar el promedio del hipervolumen.
+
+---
+
+## Pendiente: problemas GLT
+
+**Tarea:** implementar los problemas **GLT1, GLT2, GLT3, GLT4, GLT5 y GLT6** y resolverlos con el **mismo NSGA-II** que ya tenemos.
+
+Vienen del artículo de Gu, Liu y Tan (2012), *A Multiobjective Evolutionary Algorithm Using Dynamic Weight Design Method*. GLT son las iniciales de los autores, igual que ZDT. En el artículo se llaman **F1 a F6** y están en la **tabla 1** (página 3685). La fórmula general está en la sección 5 (página 3684).
+
+### Cómo están armados
+Todos siguen el mismo molde, parecido al de las ZDT:
+
+```
+f_i(x) = (1 + g) · α_i(x_I)
+g      = Σ (x_j − sin(2π·x1 + j·π/n))²      n = 10 variables
+```
+
+- **`α_i`** les da la **forma** al frente. Cada problema tiene sus propias `α`.
+- **`g`** mide qué tan **lejos** estás del frente. Es 0 justo en el frente óptimo.
+- **La diferencia con ZDT**: en ZDT el óptimo era `x2 … xm = 0`. Aquí cada variable tiene que valer `x_j = sin(2π·x1 + j·π/10)`, o sea que **depende de `x1`** y es distinto para cada variable. Por eso estos problemas son más difíciles: el conjunto óptimo en el espacio de variables es una curva, no una recta.
+
+| Problema | Objetivos | Variables y dominio | `g` suma desde | Forma del frente (tabla 1) |
+|---|---|---|---|---|
+| GLT1 (F1) | 2 | `x1 ∈ [0, 1]`, `x2 … x10 ∈ [−1, 1]` | `j = 2` | lineal, en pedazos |
+| GLT2 (F2) | 2 | igual | `j = 2` | convexo, `f2` llega hasta 10 |
+| GLT3 (F3) | 2 | igual | `j = 2` | convexo, con un quiebre en `x1 = 0.05` |
+| GLT4 (F4) | 2 | igual | `j = 2` | convexo, en pedazos, `f2` llega hasta 2 |
+| GLT5 (F5) | **3** | `x1, x2 ∈ [0, 1]`, `x3 … x10 ∈ [−1, 1]` | `j = 3` | convexo |
+| GLT6 (F6) | **3** | igual | `j = 3` | convexo, en pedazos |
+
+Las `α` de cada problema (tabla 1):
+- **GLT1**: `α1 = x1`, `α2 = 2 − x1 − sign(cos(2π·x1))`
+- **GLT2**: `α1 = 1 − cos(x1·π/2)`, `α2 = 10 − 10·sin(x1·π/2)`
+- **GLT3**: `α1 = x1`, `α2 = 1 − 19·x1` si `x1 ≤ 0.05`, si no `1/19 − x1/19`
+- **GLT4**: `α1 = x1`, `α2 = 2 − 2·√x1·cos(2·√x1·π)²` (así viene en jMetal y es la que coincide con la gráfica de F4 en la figura 5 del artículo)
+- **GLT5**: `α1 = (1 − cos(x1·π/2))·(1 − cos(x2·π/2))`, `α2 = (1 − cos(x1·π/2))·(1 − sin(x2·π/2))`, `α3 = 1 − sin(x1·π/2)`
+- **GLT6**: `α1` y `α2` iguales a GLT5, `α3 = 2 − sin(x1·π/2) − sign(cos(4·x1·π))`
+
+`sign()` regresa 1 si el número es positivo, −1 si es negativo y 0 si es 0. Es lo que hace que GLT1 y GLT6 tengan el frente en pedazos.
+
+### Implementación de referencia: jMetal
+Una compañera compartió la implementación de **jMetal** (biblioteca de Java para optimización multiobjetivo): [`glt/GLT1.java`](https://github.com/jMetal/jMetal/blob/main/jmetal-problem/src/main/java/org/uma/jmetal/problem/multiobjective/glt/GLT1.java), y en la misma carpeta están `GLT2.java` … `GLT6.java`. Comparada con el artículo:
+
+- **Iguales:** GLT1, GLT2, GLT5 y GLT6 (las `α`), el número de variables (10), los dominios y el número de objetivos.
+- **GLT4:** la tabla del artículo se lee mal en el PDF. La fórmula de jMetal, `cos(2·√x1·π)²`, es la que reproduce la gráfica de F4 del artículo: `f2 ≈ 1.9` en `x1 = 0.1`, `≈ 1` en `x1 = 0.28` y `0` en `x1 = 1`.
+- **GLT3:** el artículo decide el tramo con `x1 ≤ 0.05`; jMetal usa `f1 < 0.05`, donde `f1 = (1 + g)·x1`. Sobre el frente óptimo (`g = 0`) dan lo mismo. Fuera de él cambian un poco.
+- **El seno de `g`:** el artículo escribe `x_j − sin(2π·x1 + j·π/n)` y jMetal usa `x_j − sin(2π·x1 + (j−1)·π/n)`, porque en Java los índices empiezan en 0. El frente en el espacio de objetivos queda **igual**, ya que en los dos casos `g` puede llegar a 0. Lo que cambia es **dónde** quedan las variables óptimas, o sea los valores de `VAR.txt`.
+
+Conviene seguir **jMetal**: es la implementación estándar, coincide con las gráficas del artículo y así los resultados se pueden comparar con los del grupo.
+
+### Qué hay que cambiar en el NSGA-II
+- **GLT1 a GLT4** (2 objetivos): basta con agregarlos como problemas nuevos, igual que las ZDT. Solo cambian las funciones y los dominios.
+- **GLT5 y GLT6** (3 objetivos): el código actual da por hecho 2 objetivos. Las soluciones son `[f1, f2, x…]`, se compara con `sol[:2]` y la crowding distance usa `num_objetivos=2`. Hay que generalizarlo a 3 objetivos: `[f1, f2, f3, x…]`. La gráfica pasa a ser 3D. `leb_measure` ya funciona en 3 dimensiones, y `FUN.txt` tendría 3 columnas.
+- **Punto de referencia**: ya no sirve `(1.1, 1.1)` para todos. En GLT2 `f2` llega hasta 10 y en GLT4 hasta 2, así que cada problema necesita su propia referencia.
+
+### Lo que usa el artículo (como referencia)
+- Población 100 para 2 objetivos y 300 para 3 objetivos; 1000 generaciones; 30 corridas.
+- Mide la calidad con **IGD**, la distancia promedio del frente verdadero al obtenido (más chico es mejor), no con hipervolumen.
+
+### Por confirmar con el profesor
+- [ ] ¿Se entrega igual que ZDT, con `FUN.txt` y `VAR.txt` por problema en un `.zip`?
+- [ ] ¿La calidad se mide con hipervolumen, como en ZDT, con IGD, como en el artículo, o con las dos?
+- [ ] ¿Qué punto de referencia por problema, si es hipervolumen?
+- [ ] ¿Población y generaciones como en el artículo (100/300 y 1000) o como en ZDT (100 y 250)?
+
+### Hecho en `nsga2_glt.py`
+Archivo independiente, con la misma estructura que `nsga2_zdt.py` (mismo NSGA-II, misma cruza BLX-α, mutación `1/n`, semilla 1). Lo nuevo:
+- **Funciones `glt1` … `glt6`** copiadas de jMetal. `g_glt(x, desde)` es la `g` común: `desde = 1` en los de 2 objetivos y `2` en los de 3. `signo()` es el `Math.signum` de Java.
+- **El NSGA-II acepta 2 o 3 objetivos**: cada solución es `[f1, ..., fk, x1, ..., x10]` y `k` se pasa a `fast_nondominated_sort`, `crowding_distance`, `make_new_pop` y `siguiente_poblacion`. Población de 100 con 2 objetivos y de 300 con 3, como en el artículo; 250 generaciones, como en ZDT.
+- **Frente óptimo** (`frente_optimo`): se pone `g = 0`, o sea cada `x_i = sin(2π·x1 + i·π/n)`, se barre `x1` (y `x2` en 3 objetivos) y se queda solo con lo no dominado.
+- **Punto de referencia por problema** (`punto_referencia`): 10 % arriba del peor valor del frente óptimo en cada objetivo, la misma regla que el `(6, 7)` del ejemplo y el `(1.1, 1.1)` de ZDT. Queda `(1.1, 1.1)` en GLT1 y GLT3, `(1.1, 11)` en GLT2, `(1.1, 2.2)` en GLT4 y `(1.1, 1.1, 1.1)` en GLT5 y GLT6.
+- **Calidad con hipervolumen y con IGD** (la métrica del artículo), mientras se confirma cuál piden.
+- **Salidas:** `salidas/GLTn/FUN.txt` (2 o 3 columnas) y `salidas/GLTn/VAR.txt` (10 columnas), y `nsga2_glt.png` con las 6 gráficas (GLT5 y GLT6 en 3D).
+- **Tarda unos 22 minutos**, casi todo en GLT5 y GLT6.
+
+### Resultados (semilla 1)
+| Problema | Objetivos | Referencia | HV | % del óptimo | IGD |
+|---|---|---|---|---|---|
+| GLT1 | 2 | (1.1, 1.1) | 0.3747 | 64.2 % | 0.1040 |
+| GLT2 | 2 | (1.1, 11) | 8.7217 | 87.7 % | 0.2938 |
+| GLT3 | 2 | (1.1, 1.1) | 1.1348 | 97.9 % | 0.2308 |
+| GLT4 | 2 | (1.1, 2.2) | 1.2019 | 84.8 % | 0.2009 |
+| GLT5 | 3 | (1.1, 1.1, 1.1) | 1.2842 | 98.4 % | 0.0386 |
+| GLT6 | 3 | (1.1, 1.1, 1.1) | 1.2641 | 98.3 % | 0.0480 |
+
+- **GLT1 y GLT4** (frentes en pedazos): NSGA-II solo cubre **uno de los dos pedazos**. En GLT1 se queda con el de abajo a la derecha y del de arriba solo deja un punto suelto; en GLT4 es al revés. Por eso bajan a 64 % y 85 %.
+- **GLT2** todavía no termina de pegarse a la curva: hay puntos sueltos arriba de ella.
+- **GLT3** tiene buen HV (98 %) pero IGD alto: casi todos los puntos quedaron en la parte vertical del frente y el tramo horizontal (`f1` de 0.05 a 1) quedó vacío. El IGD sí castiga eso, porque mide que se cubra **todo** el frente.
+- **GLT5 y GLT6** salen bien. Su frente óptimo para comparar es una rejilla de 20 × 20, así que el % es aproximado.
+- Son más difíciles que las ZDT porque las variables óptimas siguen una curva (`x_i = sin(...)`) en vez de valer 0. El artículo usa 1000 generaciones; con más generaciones deberían mejorar.
+
+### Pendiente
+- [ ] Confirmar con el profesor la forma de entrega, la métrica (HV o IGD), las referencias y las generaciones.
+- [ ] Si piden el `.zip` como en ZDT, armarlo con `salidas/GLT1 ... GLT6`.
